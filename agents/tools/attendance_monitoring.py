@@ -4,7 +4,7 @@ import os
 import cv2
 import numpy as np
 import face_recognition
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional
 from config import TRAIN_DIR, MONGO_URI, DB_NAME, SESSION_ID
 from pymongo import MongoClient
 from .json_utils import json_serialize
@@ -92,7 +92,7 @@ def load_known_faces(train_dir: str = TRAIN_DIR) -> Tuple[List[np.ndarray], List
     print(f"Loaded {len(known_face_encodings)} known faces: {known_names}")
     return known_face_encodings, known_names
 
-def mark_attendance_from_image(image_path: str) -> str:
+def mark_attendance_from_image(image_path: str, class_id: Optional[str] = None) -> str:
     """
     Process a group image to determine attendance status for each student.
     
@@ -103,6 +103,7 @@ def mark_attendance_from_image(image_path: str) -> str:
                          Examples:
                          - "path/to/class_photo.jpg"
                          - "https://example.com/class_photo.jpg"
+        class_id (Optional[str]): Identifier for the class or section
     
     Returns:
         str: A JSON serialized string containing attendance records or error
@@ -165,7 +166,8 @@ def mark_attendance_from_image(image_path: str) -> str:
                 "student_name": name,
                 "status": "present" if name in recognized_names else "absent",
                 "timestamp": datetime.now().isoformat(),
-                "remarks": "Detected in class photo" if name in recognized_names else "Not detected in class photo"
+                "remarks": "Detected in class photo" if name in recognized_names else "Not detected in class photo",
+                "class_id": class_id  # Add class_id to the record
             }
             attendance_records.append(record)
         

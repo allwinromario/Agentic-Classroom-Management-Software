@@ -39,6 +39,10 @@ def setup_database():
                         "remarks": {
                             "bsonType": ["string", "null"],  # Allow null for empty remarks
                             "description": "Additional notes or remarks"
+                        },
+                        "class_id": {
+                            "bsonType": ["string", "null"],  # Optional class identifier
+                            "description": "Optional identifier for the class or section"
                         }
                     }
                 }
