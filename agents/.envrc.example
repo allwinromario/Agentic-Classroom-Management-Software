@@ -1,0 +1,6 @@
+# =================================
+# Fill in the following variables:
+# =================================
+
+export GOOGLE_API_KEY=AIzaSyAA-h4GrjAUv0t1mwOcjO2umEjr6j_xplk
+export MONGO_URI=mongodb+srv://admin:admin@123@scms-cluster.wfsdwph.mongodb.net/?retryWrites=true&w=majority&appName=SCMS-Cluster
