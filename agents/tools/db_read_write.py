@@ -4,11 +4,24 @@ from typing import Any, Dict, Optional, List
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 from bson import ObjectId
+from datetime import datetime
 from config import MONGO_URI, DB_NAME
 from .json_utils import json_serialize
 
 # Create a global client with connection pooling
 _mongo_client: Optional[MongoClient] = None
+
+def sanitize_for_json(obj: Any) -> Any:
+    """Convert complex types to simple types that can be JSON serialized."""
+    if isinstance(obj, ObjectId):
+        return str(obj)
+    elif isinstance(obj, datetime):
+        return obj.strftime("%Y-%m-%d %H:%M:%S")
+    elif isinstance(obj, dict):
+        return {k: sanitize_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [sanitize_for_json(item) for item in obj]
+    return obj
 
 def get_database_client() -> MongoClient:
     """
@@ -33,46 +46,40 @@ def write_data(collection_name: str, data: List[Dict[str, Any]]) -> Dict[str, An
     
     Args:
         collection_name: Name of the collection to write to
-        data: List of dictionaries containing the data to write. For example:
-            List[Dict[str, Any]]: A list of attendance records, where each record is a dictionary:
-            [
-                {
-                    "student_name": str,  # Student name in uppercase
-                    "status": str,        # "present" or "absent"
-                    "timestamp": str,     # UTC timestamp as ISO format string
-                    "remarks": str        # Detection remarks
-                },
-                ...
-            ]
+        data: List of dictionaries containing the data to write
         
     Returns:
-        Dict containing status of the operation
+        Dict[str, Any]: JSON serialized response containing status of the operation
     """
     try:
         client = get_database_client()
         db = client[DB_NAME]
         collection = db[collection_name]
         
-        # Insert the data directly since datetime is already handled
-        result = collection.insert_many(data)
+        # Sanitize the input data
+        sanitized_data = sanitize_for_json(data)
         
+        # Insert the sanitized data
+        result = collection.insert_many(sanitized_data)
+        
+        # Create response with sanitized IDs
         response = {
             "status": "success",
-            "message": f"Data written successfully. Inserted {len(result.inserted_ids)} documents."
+            "message": f"Data written successfully. Inserted {len(result.inserted_ids)} documents.",
+            "inserted_ids": [str(id) for id in result.inserted_ids]
         }
-        return json_serialize(response)
+        return response
+        
     except ConnectionFailure as e:
-        error_response = {
+        return {
             "status": "error",
             "message": f"Database connection error: {str(e)}"
         }
-        return json_serialize(error_response)
     except Exception as e:
-        error_response = {
+        return {
             "status": "error",
             "message": f"Database error: {str(e)}"
         }
-        return json_serialize(error_response)
 
 def read_data(collection_name: str, query: Dict[str, Any] = None) -> Dict[str, Any]:
     """
@@ -83,7 +90,7 @@ def read_data(collection_name: str, query: Dict[str, Any] = None) -> Dict[str, A
         query: Query dictionary to filter results
         
     Returns:
-        Dict containing the query results
+        Dict[str, Any]: JSON serialized response containing the query results
     """
     if query is None:
         query = {}
@@ -97,28 +104,25 @@ def read_data(collection_name: str, query: Dict[str, Any] = None) -> Dict[str, A
         cursor = collection.find(query)
         results = []
         for doc in cursor:
-            # Convert ObjectId to string for _id field
-            if '_id' in doc:
-                doc['_id'] = str(doc['_id'])
-            results.append(doc)
+            # Sanitize each document
+            sanitized_doc = sanitize_for_json(doc)
+            results.append(sanitized_doc)
         
-        response = {
+        return {
             "status": "success",
             "data": results
         }
-        return json_serialize(response)
+        
     except ConnectionFailure as e:
-        error_response = {
+        return {
             "status": "error",
             "message": f"Database connection error: {str(e)}"
         }
-        return json_serialize(error_response)
     except Exception as e:
-        error_response = {
+        return {
             "status": "error",
             "message": f"Database error: {str(e)}"
         }
-        return json_serialize(error_response)
 
 # Example usage:
 # if __name__ == "__main__":

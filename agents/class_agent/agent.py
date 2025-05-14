@@ -22,7 +22,7 @@ root_agent = LlmAgent(
                 """,
     instruction=ROOT_AGENT_INSTR,
     sub_agents=[],
-    tools=[mark_attendance_from_image],
+    tools=[mark_attendance_from_image, write_data],
     )
 
 # Instantiate the desired artifact service
