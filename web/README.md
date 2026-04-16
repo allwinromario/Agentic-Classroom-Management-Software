@@ -1,36 +1,83 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SCMS Web Application
 
-## Getting Started
+Next.js app for **Smart Classroom Management** (SCMS): role-based dashboards, attendance APIs, AI assistant hooks, and Prisma-backed persistence. Full product overview, demo accounts, and Python agent setup live in the [monorepo README](../README.md).
 
-First, run the development server:
+## Stack
+
+- **Framework:** Next.js 16 (App Router), React 19, TypeScript  
+- **Styling:** Tailwind CSS v4  
+- **Data:** Prisma 5 + SQLite in dev (`DATABASE_URL` in `.env.local`)  
+- **Auth:** JWT (httpOnly cookie) + bcrypt (`JWT_SECRET` in `.env.local`)  
+- **Other:** Zustand, Socket.io (optional custom server), MongoDB driver for document features, Zod validation  
+
+## Prerequisites
+
+- Node.js 20+ (LTS recommended)  
+- npm (ships with Node)  
+
+## Setup
+
+From this directory (`scms/web`):
+
+```bash
+npm install
+cp .env.example .env.local
+```
+
+Edit **`.env.local`**. At minimum set:
+
+| Variable | Purpose |
+|----------|---------|
+| `DATABASE_URL` | Prisma connection string, e.g. `file:./prisma/dev.db` for SQLite |
+| `JWT_SECRET` | Strong secret for signing sessions (use a long random string in production) |
+| `MONGODB_URI` / `MONGODB_DB_NAME` | MongoDB (see `.env.example`) |
+
+Optional: `OPENAI_API_KEY`, `ATTENDANCE_SERVICE_URL` or `NEXT_PUBLIC_ATTENDANCE_SERVICE_URL`, `NEXT_PUBLIC_SOCKET_ENABLED=true` when using the Socket.io server.
+
+Initialize the database and seed demo users:
+
+```bash
+npx prisma migrate dev
+npm run db:seed
+```
+
+## Run
+
+**Standard dev server** (no custom Socket.io process):
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+**Dev with Socket.io** (real-time attendance/alerts; set `NEXT_PUBLIC_SOCKET_ENABLED=true` in `.env.local`):
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run dev:socket
+```
 
-## Learn More
+## Useful scripts
 
-To learn more about Next.js, take a look at the following resources:
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Next.js dev |
+| `npm run dev:socket` | Custom server + Socket.io (`server.ts`) |
+| `npm run build` / `npm start` | Production build and start |
+| `npm run lint` | ESLint |
+| `npm run db:push` | `prisma db push` (schema sync) |
+| `npm run db:studio` | Prisma Studio |
+| `npm run db:seed` | Run `prisma/seed.ts` |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Layout
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `src/app/` — routes: `admin/`, `student/`, `super-admin/`, `api/`, auth pages  
+- `src/components/` — shared UI and providers  
+- `src/lib/` — auth, Prisma client, Mongo helpers, sockets, AI helpers  
+- `prisma/` — `schema.prisma`, migrations, `seed.ts`  
 
-## Deploy on Vercel
+## Deploy
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Configure production `DATABASE_URL` (e.g. PostgreSQL), `JWT_SECRET`, and any optional service URLs on your host (Vercel, Node VM, etc.). For Socket.io you need a deployment target that supports a long-lived Node process, not only serverless functions.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+For more detail (API table, attendance service, agents), see **[../README.md](../README.md)**.
