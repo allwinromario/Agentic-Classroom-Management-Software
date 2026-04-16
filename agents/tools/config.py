@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 # Training directory
 TRAIN_DIR = "tools/train"
 

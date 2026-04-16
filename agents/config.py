@@ -13,7 +13,7 @@ MONGO_URI = f"mongodb+srv://{quote_plus(MONGO_USER)}:{quote_plus(MONGO_PASS)}@{M
 GOOGLE_API_KEY: Optional[str] = os.getenv("GOOGLE_API_KEY")
 
 # Model configuration
-MODEL = "gemini-2.0-flash"
+MODEL = "gemini-2.5-flash"
 TEMPERATURE = 1.0
 MAX_OUTPUT_TOKENS = 4096
 

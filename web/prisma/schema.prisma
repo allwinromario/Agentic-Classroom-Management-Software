@@ -1,0 +1,195 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Role: SUPER_ADMIN | ADMIN | STUDENT
+// UserStatus: PENDING | APPROVED | REJECTED
+// TimetableStatus: DRAFT | PENDING_APPROVAL | APPROVED | REJECTED
+// AttendanceStatus: PRESENT | ABSENT | LATE
+// DayOfWeek: MONDAY | TUESDAY | WEDNESDAY | THURSDAY | FRIDAY | SATURDAY | SUNDAY
+
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  password      String
+  role          String   @default("STUDENT")
+  status        String   @default("PENDING")
+
+  // Face registration
+  faceEmbedding          String?  // JSON float array from AI service
+  faceRegistered         Boolean  @default(false)
+  faceImageB64           String?  // compressed thumbnail (for superadmin preview)
+  faceRetakeRequested    Boolean  @default(false)
+  faceRetakeApproved     Boolean  @default(false)
+  faceRetakeReason       String?
+
+  avatarUrl     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  timetablesCreated Timetable[]       @relation("CreatedBy")
+  attendances       Attendance[]      @relation("StudentAttendance")
+  alerts            Alert[]           @relation("CreatedAlerts")
+  messages          ChatMessage[]
+  enrollments       ClassEnrollment[] @relation("StudentEnrollments")
+  marks             Marks[]           @relation("StudentMarks")
+  reports           Report[]          @relation("StudentReports")
+
+  @@map("users")
+}
+
+model Timetable {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  status      String   @default("DRAFT")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdById String
+  createdBy   User    @relation("CreatedBy", fields: [createdById], references: [id])
+
+  classes Class[]
+
+  @@map("timetables")
+}
+
+model Class {
+  id        String   @id @default(cuid())
+  subject   String
+  room      String?
+  startTime String
+  endTime   String
+  dayOfWeek String
+  createdAt DateTime @default(now())
+
+  timetableId String
+  timetable   Timetable  @relation(fields: [timetableId], references: [id], onDelete: Cascade)
+
+  attendances Attendance[]
+  enrollments ClassEnrollment[]
+
+  @@map("classes")
+}
+
+// Tracks which students are enrolled in each class.
+// If a class has no enrollments, all approved students may mark attendance.
+model ClassEnrollment {
+  id         String   @id @default(cuid())
+  enrolledAt DateTime @default(now())
+
+  studentId  String
+  student    User  @relation("StudentEnrollments", fields: [studentId], references: [id], onDelete: Cascade)
+
+  classId    String
+  class      Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, classId])
+  @@map("class_enrollments")
+}
+
+model Attendance {
+  id           String    @id @default(cuid())
+  status       String    @default("ABSENT")
+  timestamp    DateTime  @default(now())
+  remarks      String?
+
+  // Set by teacher when they click Save — starts the 24hr edit window
+  savedAt      DateTime?
+
+  // Location captured at the moment the student marks attendance
+  latitude     Float?
+  longitude    Float?
+  locationName String?  // reverse-geocoded city/area name
+
+  studentId String
+  student   User   @relation("StudentAttendance", fields: [studentId], references: [id])
+
+  classId String
+  class   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, classId])
+  @@map("attendances")
+}
+
+model Alert {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  severity  String   @default("info")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  createdById String
+  createdBy   User   @relation("CreatedAlerts", fields: [createdById], references: [id])
+
+  @@map("alerts")
+}
+
+// Soft-delete archive — email is freed from `users` so it can be re-registered.
+// Kept here for auditing purposes only.
+model DeletedUser {
+  id          String   @id @default(cuid())
+  originalId  String
+  name        String
+  email       String
+  role        String
+  status      String
+  deletedAt   DateTime @default(now())
+  deletedById String   // super admin who deleted
+
+  @@map("deleted_users")
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  content   String
+  role      String
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@map("chat_messages")
+}
+
+// ── AI Layer ────────────────────────────────────────────────────────────────
+
+model Marks {
+  id        String   @id @default(cuid())
+  studentId String
+  subject   String
+  score     Float
+  maxScore  Float
+  examType  String   @default("MIDTERM")
+  createdAt DateTime @default(now())
+
+  student User @relation("StudentMarks", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("marks")
+}
+
+// Snapshot report generated by the AI layer for a student.
+// subjectBreakdown, recommendations, studyPlan are JSON strings.
+model Report {
+  id                   String   @id @default(cuid())
+  studentId            String
+  attendancePercentage Float
+  averageMarks         Float
+  performanceLevel     String   // GOOD | AVERAGE | WEAK
+  subjectBreakdown     String
+  recommendations      String
+  studyPlan            String
+  summary              String?
+  generatedAt          DateTime @default(now())
+
+  student User @relation("StudentReports", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("reports")
+}

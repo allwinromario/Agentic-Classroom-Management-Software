@@ -1,7 +1,16 @@
 .dev/
 .venv/
+.venv-*/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 *.pyw
+
+.DS_Store
+**/.DS_Store
+
+# Local secrets / credentials — never commit
+agents/.env
+agents/.envrc
+dt-roshan-sandbox-dev-*.json

@@ -5,12 +5,12 @@ import cv2
 import numpy as np
 import face_recognition
 from typing import Dict, List, Tuple, Any, Optional
-from config import TRAIN_DIR, MONGO_URI, DB_NAME, SESSION_ID
+from config import MONGO_URI, DB_NAME
 from pymongo import MongoClient
 from .json_utils import json_serialize
+from .setup import load_known_faces  # Import from setup.py
 import requests
 from datetime import datetime
-
 from urllib.parse import urlparse
 
 def is_url(path: str) -> bool:
@@ -58,40 +58,6 @@ def load_image(image_path: str) -> Tuple[np.ndarray, str]:
     except Exception as e:
         return None, f"Error loading image: {str(e)}"
 
-def load_known_faces(train_dir: str = TRAIN_DIR) -> Tuple[List[np.ndarray], List[str]]:
-    """
-    Load and encode known faces from the training directory.
-    
-    Args:
-        train_dir: Directory containing training images
-        
-    Returns:
-        Tuple of (known_face_encodings, known_names)
-    """
-    known_face_encodings = []
-    known_names = []
-    
-    for filename in os.listdir(train_dir):
-        if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.webp')):
-            image_path = os.path.join(train_dir, filename)
-            try:
-                # Load and encode the image
-                image = face_recognition.load_image_file(image_path)
-                encodings = face_recognition.face_encodings(image)
-                
-                if encodings:
-                    known_face_encodings.append(encodings[0])
-                    # Get name from filename (without extension)
-                    name = os.path.splitext(filename)[0].upper()
-                    known_names.append(name)
-                else:
-                    print(f"Warning: No face found in {filename}")
-            except Exception as e:
-                print(f"Error processing {filename}: {e}")
-    
-    print(f"Loaded {len(known_face_encodings)} known faces: {known_names}")
-    return known_face_encodings, known_names
-
 def mark_attendance_from_image(image_path: str, class_id: Optional[str] = None) -> str:
     """
     Process a group image to determine attendance status for each student.
@@ -114,7 +80,7 @@ def mark_attendance_from_image(image_path: str, class_id: Optional[str] = None) 
         db = client[DB_NAME]
         attendance_collection = db.attendance
         
-        # Load known faces
+        # Load known faces using the function from setup.py
         known_face_encodings, known_names = load_known_faces()
         if not known_face_encodings:
             return json_serialize({"error": "No known faces found in training directory"})
@@ -165,7 +131,7 @@ def mark_attendance_from_image(image_path: str, class_id: Optional[str] = None) 
             record = {
                 "student_name": name,
                 "status": "present" if name in recognized_names else "absent",
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now().strftime("%Y-%m-%d"),
                 "remarks": "Detected in class photo" if name in recognized_names else "Not detected in class photo",
                 "class_id": class_id  # Add class_id to the record
             }
@@ -189,7 +155,7 @@ def mark_attendance_from_image(image_path: str, class_id: Optional[str] = None) 
     finally:
         client.close()
 
-# # Example usage:
+# Example usage:
 # if __name__ == "__main__":
 #     test_image_path = "tools/test.webp"
 #     attendance_result = mark_attendance_from_image(test_image_path)
