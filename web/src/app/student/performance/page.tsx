@@ -51,6 +51,7 @@ interface Report {
 }
 
 const LEVEL_CONFIG = {
+  STRONG:  { label: "Strong",  color: "text-emerald-400", bg: "bg-emerald-500/20", border: "border-emerald-500/30", bar: "#10b981" },
   GOOD:    { label: "Good",    color: "text-emerald-400", bg: "bg-emerald-500/20", border: "border-emerald-500/30", bar: "#10b981" },
   AVERAGE: { label: "Average", color: "text-amber-400",   bg: "bg-amber-500/20",   border: "border-amber-500/30",   bar: "#f59e0b" },
   WEAK:    { label: "Weak",    color: "text-red-400",     bg: "bg-red-500/20",     border: "border-red-500/30",     bar: "#ef4444" },

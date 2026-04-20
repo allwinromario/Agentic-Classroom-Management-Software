@@ -32,7 +32,7 @@ Edit **`.env.local`**. At minimum set:
 | `JWT_SECRET` | Strong secret for signing sessions (use a long random string in production) |
 | `MONGODB_URI` / `MONGODB_DB_NAME` | MongoDB (see `.env.example`) |
 
-Optional: `OPENAI_API_KEY`, `ATTENDANCE_SERVICE_URL` or `NEXT_PUBLIC_ATTENDANCE_SERVICE_URL`, `NEXT_PUBLIC_SOCKET_ENABLED=true` when using the Socket.io server.
+Optional: `GOOGLE_API_KEY`, `ATTENDANCE_SERVICE_URL` or `NEXT_PUBLIC_ATTENDANCE_SERVICE_URL`, `NEXT_PUBLIC_SOCKET_ENABLED=true` when using the Socket.io server, and `CLASS_AGENT_SERVICE_URL` for teacher assistant integration (default local: `http://localhost:8001`).
 
 Initialize the database and seed demo users:
 

@@ -1,7 +1,8 @@
 /**
- * AI Service — rule-based intelligence with OpenAI-ready fallback.
+ * AI Service — rule-based intelligence with Gemini-ready fallback.
  * All business logic lives here so API routes stay thin.
  */
+import { GoogleGenAI } from "@google/genai";
 
 export interface MarkInput {
   subject: string;
@@ -46,6 +47,7 @@ export interface StudyPlanDay {
 
 export interface ReportData {
   studentId: string;
+  studentName: string;
   attendancePercentage: number;
   averageMarks: number;
   performanceLevel: ReportLevel;
@@ -73,6 +75,7 @@ export function analyzeStudent(data: StudentData): ReportData {
 
   return {
     studentId: data.id,
+    studentName: data.name,
     attendancePercentage: data.attendancePercentage,
     averageMarks,
     performanceLevel,
@@ -379,83 +382,137 @@ export function parseNLCommand(input: string): ParsedCommand {
   return { intent: "unknown", params: {}, confidence: 0 };
 }
 
-// ─── OpenAI-ready upgrade path ────────────────────────────────────────────────
+// ─── Gemini-ready upgrade path ────────────────────────────────────────────────
+
+const GEMINI_MODEL = "gemini-2.5-flash";
+
+function getGeminiClient(): GoogleGenAI | null {
+  const apiKey = process.env.GOOGLE_API_KEY?.trim();
+  if (!apiKey) return null;
+  return new GoogleGenAI({ apiKey });
+}
+
+function readGeminiText(response: unknown): string | null {
+  if (!response || typeof response !== "object") return null;
+
+  const withText = response as { text?: string };
+  if (typeof withText.text === "string" && withText.text.trim()) {
+    return withText.text.trim();
+  }
+
+  const candidates = (response as {
+    candidates?: Array<{
+      content?: { parts?: Array<{ text?: string }> };
+    }>;
+  }).candidates;
+  const text = candidates
+    ?.flatMap((candidate) => candidate.content?.parts ?? [])
+    .map((part) => part.text ?? "")
+    .join("")
+    .trim();
+
+  return text ? text : null;
+}
+
+function stripCodeFence(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith("```")) return trimmed;
+  return trimmed
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+}
+
+function isRecommendation(item: unknown): item is Recommendation {
+  if (!item || typeof item !== "object") return false;
+  const rec = item as Partial<Recommendation>;
+  const validType = rec.type === "study" || rec.type === "attendance" || rec.type === "exam" || rec.type === "general";
+  const validPriority = rec.priority === "high" || rec.priority === "medium" || rec.priority === "low";
+  const validMessage = typeof rec.message === "string" && rec.message.trim().length > 0;
+  const validSubject = rec.subject === undefined || typeof rec.subject === "string";
+  return validType && validPriority && validMessage && validSubject;
+}
 
 export async function generateReportSummaryAI(data: ReportData): Promise<string> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (apiKey && apiKey.startsWith("sk-") && apiKey.length > 20) {
-    try {
-      const prompt = `Write a concise 2-3 sentence academic progress summary for a student:
+  const client = getGeminiClient();
+  if (!client) return data.summary;
+
+  try {
+    const prompt = `Write a concise 2-3 sentence academic progress summary.
+Student name: ${data.studentName}
 - Attendance: ${data.attendancePercentage.toFixed(1)}%
 - Average marks: ${data.averageMarks}%
 - Performance level: ${data.performanceLevel}
 - Subjects: ${data.subjectBreakdown.map((s) => `${s.subject} ${s.percentage}% (${s.level})`).join(", ")}
-Be constructive, specific and motivational.`;
+Be constructive, specific and motivational.
+Do not use placeholders like "[Student Name]" or "<name>".
+Use the student's actual name naturally in the first sentence.`;
 
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: "gpt-3.5-turbo",
-          messages: [{ role: "user", content: prompt }],
-          max_tokens: 180,
-          temperature: 0.7,
-        }),
-      });
+    const response = await client.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: prompt,
+      config: {
+        temperature: 0.7,
+        maxOutputTokens: 180,
+      },
+    });
 
-      if (res.ok) {
-        const json = (await res.json()) as {
-          choices: Array<{ message: { content: string } }>;
-        };
-        const content = json.choices[0]?.message?.content?.trim();
-        if (content) return content;
+    const content = readGeminiText(response);
+    if (content) {
+      // Guard against template placeholders from model output.
+      if (/\[student\s*name\]|<\s*name\s*>/i.test(content)) {
+        return content
+          .replace(/\[student\s*name\]/gi, data.studentName)
+          .replace(/<\s*name\s*>/gi, data.studentName);
       }
-    } catch {
-      // Fall through to rule-based summary
+      return content;
     }
+  } catch {
+    // Fall through to rule-based summary
   }
+
   return data.summary;
 }
 
 export async function generateRecommendationsAI(data: ReportData): Promise<Recommendation[]> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (apiKey && apiKey.startsWith("sk-") && apiKey.length > 20) {
-    try {
-      const weakSubjects = data.subjectBreakdown
-        .filter((s) => s.level === "WEAK")
-        .map((s) => `${s.subject} (${s.percentage}%)`);
+  const weakSubjects = data.subjectBreakdown
+    .filter((s) => s.level === "WEAK")
+    .map((s) => `${s.subject} (${s.percentage}%)`);
+  if (weakSubjects.length === 0) return data.recommendations;
 
-      if (weakSubjects.length === 0) return data.recommendations;
+  const client = getGeminiClient();
+  if (!client) return data.recommendations;
 
-      const prompt = `A student is struggling in: ${weakSubjects.join(", ")}.
+  try {
+    const prompt = `A student is struggling in: ${weakSubjects.join(", ")}.
 Generate 3 specific, actionable study recommendations as a JSON array:
 [{"type":"study","priority":"high","message":"...","subject":"..."}]
-Be specific — mention chapter revision, practice papers, or study techniques.`;
+Respond with JSON only. No markdown fences. Use only allowed values:
+- type: study|attendance|exam|general
+- priority: high|medium|low`;
 
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: "gpt-3.5-turbo",
-          messages: [{ role: "user", content: prompt }],
-          max_tokens: 400,
-          temperature: 0.6,
-        }),
-      });
+    const response = await client.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: prompt,
+      config: {
+        temperature: 0.6,
+        maxOutputTokens: 400,
+        responseMimeType: "application/json",
+      },
+    });
+    const raw = readGeminiText(response);
+    if (!raw) return data.recommendations;
 
-      if (res.ok) {
-        const json = (await res.json()) as {
-          choices: Array<{ message: { content: string } }>;
-        };
-        const raw = json.choices[0]?.message?.content?.trim();
-        if (raw) {
-          const parsed = JSON.parse(raw) as Recommendation[];
-          return [...parsed, ...data.recommendations.filter((r) => r.type !== "study")];
-        }
-      }
-    } catch {
-      // Fall through
-    }
+    const parsedUnknown = JSON.parse(stripCodeFence(raw)) as unknown;
+    if (!Array.isArray(parsedUnknown)) return data.recommendations;
+
+    const parsed = parsedUnknown.filter(isRecommendation);
+    if (parsed.length === 0) return data.recommendations;
+
+    return [...parsed, ...data.recommendations.filter((r) => r.type !== "study")];
+  } catch {
+    // Fall through
   }
+
   return data.recommendations;
 }

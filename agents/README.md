@@ -78,9 +78,22 @@ The `class_agent/` contains an LLM-powered agent for:
 # Set env vars
 export GOOGLE_API_KEY="your-gemini-api-key"
 
-# Run
+# Quick import smoke test
 cd scms/agents
-python -m class_agent
+python -c "from class_agent.agent import ensure_session; print(ensure_session(user_id='teacher_1', session_id='teacher_1'))"
+```
+
+### Start the class-agent HTTP service (for web teacher assistant)
+
+```bash
+cd scms/agents
+uvicorn agent_service:app --host 0.0.0.0 --port 8001 --reload
+```
+
+Health:
+
+```bash
+curl http://localhost:8001/health
 ```
 
 ---

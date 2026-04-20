@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     })),
   });
 
-  // Optionally upgrade summary via OpenAI
+  // Optionally upgrade summary via Gemini
   const summary = await generateReportSummaryAI(reportData);
 
   // Upsert report (one latest report per student)

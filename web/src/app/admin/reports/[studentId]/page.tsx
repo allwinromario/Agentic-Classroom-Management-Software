@@ -55,6 +55,7 @@ interface Report {
 }
 
 const LEVEL_CONFIG = {
+  STRONG:  { label: "Strong",  color: "text-emerald-400", bg: "bg-emerald-500/20", border: "border-emerald-500/30", bar: "#10b981" },
   GOOD:    { label: "Good",    color: "text-emerald-400", bg: "bg-emerald-500/20", border: "border-emerald-500/30", bar: "#10b981" },
   AVERAGE: { label: "Average", color: "text-amber-400",   bg: "bg-amber-500/20",   border: "border-amber-500/30",   bar: "#f59e0b" },
   WEAK:    { label: "Weak",    color: "text-red-400",     bg: "bg-red-500/20",     border: "border-red-500/30",     bar: "#ef4444" },
@@ -245,7 +246,7 @@ export default function AdminStudentReportPage() {
               <Brain className="h-14 w-14 mx-auto text-indigo-400/40 mb-4" />
               <h3 className="text-lg font-semibold text-zinc-200 mb-2">No report yet</h3>
               <p className="text-zinc-500 text-sm mb-6 max-w-sm mx-auto">
-                Generate an AI report to see this student's subject breakdown, recommendations and study plan.
+                Generate an AI report to see this student&apos;s subject breakdown, recommendations and study plan.
               </p>
               <Button onClick={generateReport} disabled={generating}>
                 <Brain className="h-4 w-4" />

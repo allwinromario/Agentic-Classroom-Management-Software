@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getAuthUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { sendToClassAgent } from "@/lib/classAgentClient";
 
 const chatSchema = z.object({ message: z.string().min(1).max(1000) });
 
@@ -12,6 +13,9 @@ interface ChatContext {
   faceRegistered?: boolean;
   faceRetakeRequested?: boolean;
 }
+
+const CLASS_AGENT_FALLBACK =
+  "The teacher AI agent is currently unavailable. Please try again in a moment.";
 
 // Regex to detect "requesting a retake" intent
 const RETAKE_INTENT = /retake|re-register|update (my )?photo|change (my )?face|new (face )?photo|re-?take photo/i;
@@ -85,7 +89,7 @@ function getAIReply(message: string, ctx: ChatContext): string {
   return `I'm not sure about that. Try asking about your **timetable**, **attendance**, **face ID**, or type **"help"** for a list of things I can do.`;
 }
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const auth = await getAuthUser();
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -111,8 +115,31 @@ export async function POST(req: NextRequest) {
   });
   if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  const isTeacherAgentFlow = user.role === "ADMIN";
+  const existingConversation = isTeacherAgentFlow
+    ? await prisma.chatMessage.findFirst({
+        where: {
+          userId: auth.userId,
+          conversationId: { not: null },
+        },
+        orderBy: { createdAt: "desc" },
+        select: { conversationId: true },
+      })
+    : null;
+  const conversationId = isTeacherAgentFlow
+    ? existingConversation?.conversationId ?? crypto.randomUUID()
+    : null;
+
   // Save user message
-  await prisma.chatMessage.create({ data: { userId: auth.userId, content: message, role: "user" } });
+  await prisma.chatMessage.create({
+    data: {
+      userId: auth.userId,
+      content: message,
+      role: "user",
+      source: isTeacherAgentFlow ? "class_agent" : "rule",
+      conversationId,
+    },
+  });
 
   const ctx: ChatContext = {
     name: user.name,
@@ -162,10 +189,29 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+  } else if (user.role === "ADMIN") {
+    try {
+      const result = await sendToClassAgent({
+        userId: user.id,
+        message,
+        conversationId: conversationId ?? undefined,
+      });
+      botReply = result.reply;
+    } catch {
+      botReply = CLASS_AGENT_FALLBACK;
+    }
   } else {
     botReply = getAIReply(message, ctx);
   }
 
-  const saved = await prisma.chatMessage.create({ data: { userId: auth.userId, content: botReply, role: "assistant" } });
+  const saved = await prisma.chatMessage.create({
+    data: {
+      userId: auth.userId,
+      content: botReply,
+      role: "assistant",
+      source: isTeacherAgentFlow ? "class_agent" : "rule",
+      conversationId,
+    },
+  });
   return NextResponse.json({ message: saved });
 }

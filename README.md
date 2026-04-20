@@ -60,6 +60,20 @@ pip install fastapi uvicorn face-recognition opencv-python pillow numpy
 uvicorn attendance_service:app --host 0.0.0.0 --port 8000 --reload
 ```
 
+### 3. Teacher Class-Agent Service (optional, for `/assistant` teacher flow)
+
+```bash
+cd scms/agents
+source .venv/bin/activate
+uvicorn agent_service:app --host 0.0.0.0 --port 8001 --reload
+```
+
+Health check:
+
+```bash
+curl http://localhost:8001/health
+```
+
 ---
 
 ## 🔐 Demo Credentials
@@ -120,7 +134,7 @@ scms/
 
 ### AI Chatbot
 - Context-aware rule-based assistant
-- OpenAI API ready (set `OPENAI_API_KEY`)
+- Gemini API ready (set `GOOGLE_API_KEY`)
 - Answers timetable queries, attendance info
 
 ### Premium UI
@@ -140,7 +154,7 @@ JWT_SECRET="your-secret-key"
 
 # Optional
 NEXT_PUBLIC_ATTENDANCE_SERVICE_URL="http://localhost:8000"
-OPENAI_API_KEY="sk-..."
+GOOGLE_API_KEY="AIza..."
 ```
 
 ---
