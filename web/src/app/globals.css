@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: dark;
   --background: #0f0f12;
   --foreground: #f4f4f5;
   --card: #18181b;
@@ -9,6 +10,181 @@
   --accent: #6366f1;
   --accent-glow: rgba(99, 102, 241, 0.3);
   --radius: 0.75rem;
+}
+
+/* ── Light mode overrides ──────────────────────────────────────────────────── */
+[data-theme="light"] {
+  color-scheme: light;
+  --background: #f1f5f9;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-border: #e2e8f0;
+  --muted: #64748b;
+  --accent: #4f46e5;
+  --accent-glow: rgba(79, 70, 229, 0.2);
+}
+
+[data-theme="light"] body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+[data-theme="light"] input,
+[data-theme="light"] textarea,
+[data-theme="light"] select {
+  color: #0f172a !important;
+  caret-color: #0f172a;
+  -webkit-text-fill-color: #0f172a !important;
+}
+
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder {
+  color: #94a3b8 !important;
+  -webkit-text-fill-color: #94a3b8 !important;
+}
+
+[data-theme="light"] input:-webkit-autofill,
+[data-theme="light"] input:-webkit-autofill:hover,
+[data-theme="light"] input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0px 1000px #ffffff inset !important;
+  -webkit-text-fill-color: #0f172a !important;
+  caret-color: #0f172a;
+}
+
+[data-theme="light"] .glass {
+  background: rgba(255, 255, 255, 0.88) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-color: rgba(226, 232, 240, 0.9) !important;
+}
+
+[data-theme="light"] .glass-light {
+  background: rgba(241, 245, 249, 0.7) !important;
+  border-color: rgba(203, 213, 225, 0.5) !important;
+}
+
+[data-theme="light"] .grid-bg {
+  background-color: var(--background);
+  background-image:
+    linear-gradient(rgba(79, 70, 229, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(79, 70, 229, 0.06) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ── Text ── */
+[data-theme="light"] .text-zinc-100 { color: #0f172a !important; }
+[data-theme="light"] .text-zinc-200 { color: #1e293b !important; }
+[data-theme="light"] .text-zinc-300 { color: #334155 !important; }
+[data-theme="light"] .text-zinc-400 { color: #475569 !important; }
+[data-theme="light"] .text-zinc-500 { color: #64748b !important; }
+[data-theme="light"] .text-zinc-600 { color: #475569 !important; }
+[data-theme="light"] .text-zinc-700 { color: #64748b !important; }
+
+/* Accent-300 / -100 text is too light on pale backgrounds — shift to deeper shades */
+[data-theme="light"] .text-indigo-100 { color: #3730a3 !important; }
+[data-theme="light"] .text-indigo-300 { color: #4338ca !important; }
+[data-theme="light"] .text-indigo-400 { color: #4f46e5 !important; }
+[data-theme="light"] .text-violet-300 { color: #6d28d9 !important; }
+[data-theme="light"] .text-violet-400 { color: #7c3aed !important; }
+[data-theme="light"] .text-purple-300 { color: #7e22ce !important; }
+[data-theme="light"] .text-amber-300  { color: #92400e !important; }
+[data-theme="light"] .text-amber-400  { color: #b45309 !important; }
+[data-theme="light"] .text-emerald-300 { color: #065f46 !important; }
+[data-theme="light"] .text-emerald-400 { color: #047857 !important; }
+[data-theme="light"] .text-red-300    { color: #b91c1c !important; }
+[data-theme="light"] .text-red-400    { color: #dc2626 !important; }
+
+/* Hover text states */
+[data-theme="light"] .hover\:text-zinc-200:hover { color: #1e293b !important; }
+[data-theme="light"] .hover\:text-zinc-300:hover { color: #334155 !important; }
+[data-theme="light"] .hover\:text-red-400:hover  { color: #dc2626 !important; }
+
+/* ── Backgrounds ── */
+[data-theme="light"] .bg-zinc-950     { background-color: #f1f5f9 !important; }
+[data-theme="light"] .bg-zinc-900     { background-color: #f8fafc !important; }
+[data-theme="light"] .bg-zinc-900\/60 { background-color: rgba(255, 255, 255, 0.92) !important; }
+[data-theme="light"] .bg-zinc-800     { background-color: #e2e8f0 !important; }
+[data-theme="light"] .bg-zinc-800\/20 { background-color: rgba(226, 232, 240, 0.35) !important; }
+[data-theme="light"] .bg-zinc-800\/30 { background-color: rgba(226, 232, 240, 0.45) !important; }
+[data-theme="light"] .bg-zinc-800\/40 { background-color: rgba(226, 232, 240, 0.55) !important; }
+[data-theme="light"] .bg-zinc-800\/50 { background-color: rgba(226, 232, 240, 0.70) !important; }
+[data-theme="light"] .bg-zinc-800\/60 { background-color: rgba(226, 232, 240, 0.85) !important; }
+[data-theme="light"] .bg-zinc-700     { background-color: #cbd5e1 !important; }
+
+/* Hover background states */
+[data-theme="light"] .hover\:bg-zinc-800:hover       { background-color: #e2e8f0 !important; }
+[data-theme="light"] .hover\:bg-zinc-800\/40:hover   { background-color: rgba(226, 232, 240, 0.55) !important; }
+[data-theme="light"] .hover\:bg-zinc-800\/50:hover   { background-color: rgba(226, 232, 240, 0.70) !important; }
+[data-theme="light"] .hover\:bg-zinc-800\/60:hover   { background-color: rgba(226, 232, 240, 0.85) !important; }
+[data-theme="light"] .hover\:bg-red-950\/20:hover    { background-color: rgba(254, 226, 226, 0.6) !important; }
+[data-theme="light"] .hover\:bg-indigo-950\/10:hover { background-color: rgba(238, 242, 255, 0.8) !important; }
+
+/* Tinted feature cards — replace dark 950 tints with matching light pastels */
+[data-theme="light"] .bg-indigo-950\/10 { background-color: rgba(238, 242, 255, 0.8) !important; }
+[data-theme="light"] .bg-indigo-950\/20 { background-color: rgba(224, 231, 255, 0.65) !important; }
+[data-theme="light"] .bg-indigo-600\/20 { background-color: rgba(99, 102, 241, 0.1) !important; }
+[data-theme="light"] .bg-violet-950\/10 { background-color: rgba(245, 243, 255, 0.8) !important; }
+[data-theme="light"] .bg-violet-950\/20 { background-color: rgba(237, 233, 254, 0.65) !important; }
+[data-theme="light"] .bg-violet-600\/20 { background-color: rgba(124, 58, 237, 0.08) !important; }
+[data-theme="light"] .bg-violet-600\/30 { background-color: rgba(124, 58, 237, 0.14) !important; }
+[data-theme="light"] .bg-amber-950\/10  { background-color: rgba(255, 251, 235, 0.9) !important; }
+[data-theme="light"] .bg-amber-950\/20  { background-color: rgba(254, 243, 199, 0.7) !important; }
+[data-theme="light"] .bg-emerald-950\/10 { background-color: rgba(236, 253, 245, 0.9) !important; }
+[data-theme="light"] .bg-emerald-950\/20 { background-color: rgba(209, 250, 229, 0.7) !important; }
+[data-theme="light"] .bg-red-950\/20    { background-color: rgba(254, 226, 226, 0.65) !important; }
+[data-theme="light"] .bg-red-950\/30    { background-color: rgba(254, 202, 202, 0.75) !important; }
+
+/* Gradient stop for dark-to-zinc-900 gradients */
+[data-theme="light"] .to-zinc-900 { --tw-gradient-to: #f1f5f9 var(--tw-gradient-to-position) !important; }
+[data-theme="light"] .from-zinc-900 { --tw-gradient-from: #f1f5f9 var(--tw-gradient-from-position) !important; }
+
+/* ── Borders ── */
+[data-theme="light"] .border-zinc-800     { border-color: #e2e8f0 !important; }
+[data-theme="light"] .border-zinc-800\/60 { border-color: rgba(203, 213, 225, 0.7) !important; }
+[data-theme="light"] .border-zinc-700     { border-color: #cbd5e1 !important; }
+[data-theme="light"] .border-zinc-700\/30 { border-color: rgba(203, 213, 225, 0.45) !important; }
+[data-theme="light"] .border-zinc-700\/40 { border-color: rgba(203, 213, 225, 0.55) !important; }
+[data-theme="light"] .border-zinc-700\/50 { border-color: rgba(203, 213, 225, 0.65) !important; }
+
+/* Tinted card borders */
+[data-theme="light"] .border-indigo-800\/30  { border-color: rgba(165, 180, 252, 0.7) !important; }
+[data-theme="light"] .border-indigo-600\/30  { border-color: rgba(99, 102, 241, 0.35) !important; }
+[data-theme="light"] .border-violet-800\/30  { border-color: rgba(196, 181, 253, 0.7) !important; }
+[data-theme="light"] .border-amber-800\/30   { border-color: rgba(253, 211, 77, 0.6) !important; }
+[data-theme="light"] .border-amber-700\/30   { border-color: rgba(251, 191, 36, 0.5) !important; }
+[data-theme="light"] .border-amber-500\/30   { border-color: rgba(245, 158, 11, 0.4) !important; }
+[data-theme="light"] .border-emerald-800\/30 { border-color: rgba(110, 231, 183, 0.6) !important; }
+[data-theme="light"] .border-emerald-700\/30 { border-color: rgba(52, 211, 153, 0.5) !important; }
+[data-theme="light"] .border-emerald-500\/20 { border-color: rgba(16, 185, 129, 0.3) !important; }
+[data-theme="light"] .border-red-800\/30     { border-color: rgba(252, 165, 165, 0.6) !important; }
+[data-theme="light"] .border-red-500\/20     { border-color: rgba(239, 68, 68, 0.3) !important; }
+
+/* ── prose-invert: override Tailwind Typography dark-mode text in light mode ── */
+[data-theme="light"] .prose-invert {
+  --tw-prose-body: #334155;
+  --tw-prose-headings: #0f172a;
+  --tw-prose-bold: #0f172a;
+  --tw-prose-code: #4338ca;
+  --tw-prose-pre-bg: #f1f5f9;
+  --tw-prose-links: #4338ca;
+  --tw-prose-counters: #475569;
+  --tw-prose-bullets: #475569;
+  --tw-prose-quotes: #475569;
+  --tw-prose-quote-borders: #cbd5e1;
+}
+
+/* ── Inline code blocks inside markdown ── */
+[data-theme="light"] .bg-zinc-800.text-indigo-300 {
+  background-color: #eef2ff !important;
+  color: #4338ca !important;
+}
+
+/* ── Scrollbar ── */
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 @theme inline {
@@ -32,6 +208,41 @@ body {
   font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Force all inputs/textareas to use the app foreground color —
+   prevents pasted text from inheriting black color from external sources */
+input,
+textarea,
+select {
+  color: #f4f4f5 !important;
+  caret-color: #f4f4f5;
+  -webkit-text-fill-color: #f4f4f5 !important;
+  background-color: transparent;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #52525b !important;
+  -webkit-text-fill-color: #52525b !important;
+  opacity: 1;
+}
+
+/* Selection highlight */
+::selection {
+  background: rgba(99, 102, 241, 0.35);
+  color: #fff;
+  -webkit-text-fill-color: #fff;
+}
+
+/* Autofill — prevent browser white background flash */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0px 1000px #18181b inset !important;
+  -webkit-text-fill-color: #f4f4f5 !important;
+  caret-color: #f4f4f5;
 }
 
 /* Scrollbar */

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Sidebar } from "@/components/Sidebar";
+import { ChatHistorySidebar } from "@/components/ChatHistorySidebar";
 import { useAuthStore } from "@/store/auth";
 
 interface DashboardLayoutProps {
@@ -79,6 +80,7 @@ export function DashboardLayout({ children, requiredRole }: DashboardLayoutProps
       >
         {children}
       </motion.main>
+      <ChatHistorySidebar />
     </div>
   );
 }

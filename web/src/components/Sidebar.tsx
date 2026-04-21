@@ -21,10 +21,13 @@ import {
   ClipboardList,
   Brain,
   TrendingUp,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth";
 import { getInitials } from "@/lib/utils";
+import { useTheme } from "@/components/ThemeProvider";
 
 const navByRole: Record<string, Array<{ href: string; label: string; icon: React.ComponentType<{ className?: string }> }>> = {
   SUPER_ADMIN: [
@@ -65,6 +68,7 @@ const roleColors: Record<string, string> = {
 export function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
+  const { theme, toggleTheme } = useTheme();
 
   if (!user) return null;
 
@@ -141,7 +145,7 @@ export function Sidebar() {
             )}
           >
             <MessageSquare className="h-4 w-4" />
-            AI Assistant
+            AI Assistance
           </Link>
         </div>
       </nav>
@@ -160,6 +164,38 @@ export function Sidebar() {
             </div>
           </div>
         </div>
+
+        {/* Theme toggle */}
+        <button
+          onClick={toggleTheme}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60 transition-all duration-200 mb-1 group"
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          <div className="flex items-center gap-3 flex-1">
+            {theme === "dark" ? (
+              <Sun className="h-4 w-4 text-amber-400" />
+            ) : (
+              <Moon className="h-4 w-4 text-indigo-400" />
+            )}
+            <span className="text-zinc-400 group-hover:text-zinc-200">
+              {theme === "dark" ? "Light mode" : "Dark mode"}
+            </span>
+          </div>
+          {/* Toggle pill */}
+          <div
+            className={cn(
+              "relative w-9 h-5 rounded-full transition-colors duration-300 flex-shrink-0",
+              theme === "dark" ? "bg-zinc-700" : "bg-indigo-500"
+            )}
+          >
+            <motion.div
+              animate={{ x: theme === "dark" ? 2 : 18 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+              className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm"
+            />
+          </div>
+        </button>
+
         <button
           onClick={logout}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-zinc-500 hover:text-red-400 hover:bg-red-950/20 transition-all duration-200"
