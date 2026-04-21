@@ -6,6 +6,16 @@ import { notifyClassUpdated } from "@/app/api/attendance/stream/route";
 
 const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+const JS_TO_DAYOFWEEK = ["SUNDAY","MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY"] as const;
+
+/** Parse "HH:MM" string into a Date on today's calendar date. */
+function parseClassTime(hhMm: string): Date {
+  const [h, m] = hhMm.split(":").map(Number);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d;
+}
+
 const markSchema = z.object({
   classId: z.string(),
   studentId: z.string().optional(),     // admin specifies; student = self
@@ -84,6 +94,55 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // ── Time-window enforcement (students only; admins/teachers bypass) ───────
+  // Use raw SQL so lateThresholdMins is always read correctly (new column).
+  type ClassMetaRow = { id: string; subject: string; startTime: string; endTime: string; dayOfWeek: string; lateThresholdMins: number | bigint };
+  const classMetaRows = await prisma.$queryRawUnsafe<ClassMetaRow[]>(
+    `SELECT id, subject, startTime, endTime, dayOfWeek, COALESCE(lateThresholdMins, 10) as lateThresholdMins FROM classes WHERE id = ?`,
+    classId
+  );
+  const rawMeta = classMetaRows[0] ?? null;
+  // Coerce BigInt (Prisma raw) to plain number
+  const classMeta = rawMeta ? { ...rawMeta, lateThresholdMins: Number(rawMeta.lateThresholdMins) } : null;
+  if (!classMeta) return NextResponse.json({ error: "Class not found" }, { status: 404 });
+
+  // students must mark on the correct day and within the active window
+  let resolvedStatus = data.status;
+
+  if (isStudent) {
+    const todayDay = JS_TO_DAYOFWEEK[new Date().getDay()];
+    if (classMeta.dayOfWeek !== todayDay) {
+      const dayName = classMeta.dayOfWeek.charAt(0) + classMeta.dayOfWeek.slice(1).toLowerCase();
+      return NextResponse.json(
+        { error: `This class runs on ${dayName}s — you can only mark attendance on that day.`, wrongDay: true },
+        { status: 400 }
+      );
+    }
+
+    const now           = new Date();
+    const classStart    = parseClassTime(classMeta.startTime);
+    const classEnd      = parseClassTime(classMeta.endTime);
+    const lateThreshold = new Date(classStart.getTime() + classMeta.lateThresholdMins * 60_000);
+
+    if (now < classStart) {
+      return NextResponse.json(
+        { error: `Class hasn't started yet — attendance opens at ${classMeta.startTime}.`, tooEarly: true, opensAt: classMeta.startTime },
+        { status: 400 }
+      );
+    }
+    if (now >= classEnd) {
+      return NextResponse.json(
+        { error: `Attendance window is closed — this class ended at ${classMeta.endTime}.`, tooLate: true, endedAt: classMeta.endTime },
+        { status: 400 }
+      );
+    }
+    // Automatically upgrade to LATE when past the class-specific grace period
+    if (now > lateThreshold) {
+      resolvedStatus = "LATE";
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   // ── Fetch existing record (explicit select avoids querying savedAt via ORM) ─
   const existing = await prisma.attendance.findUnique({
     where: { studentId_classId: { studentId: resolvedStudentId, classId } },
@@ -148,7 +207,7 @@ export async function POST(req: NextRequest) {
   // and tries to include savedAt in every INSERT/UPDATE, crashing with P2022.
   if (existing) {
     const setParts: string[] = ["status = ?", "remarks = ?"];
-    const setVals: unknown[] = [data.status, remarks];
+    const setVals: unknown[] = [resolvedStatus, remarks];
     if (data.latitude  != null) { setParts.push("latitude = ?");     setVals.push(data.latitude); }
     if (data.longitude != null) { setParts.push("longitude = ?");    setVals.push(data.longitude); }
     if (data.locationName)      { setParts.push("locationName = ?"); setVals.push(data.locationName); }
@@ -162,7 +221,7 @@ export async function POST(req: NextRequest) {
     const { randomBytes } = await import("crypto");
     const newId = "c" + randomBytes(11).toString("base64url").slice(0, 24);
     const cols = ["id", "studentId", "classId", "status", "timestamp", "remarks"];
-    const vals: unknown[] = [newId, resolvedStudentId, classId, data.status, now.toISOString(), remarks];
+    const vals: unknown[] = [newId, resolvedStudentId, classId, resolvedStatus, now.toISOString(), remarks];
     if (data.latitude  != null) { cols.push("latitude");     vals.push(data.latitude); }
     if (data.longitude != null) { cols.push("longitude");    vals.push(data.longitude); }
     if (data.locationName)      { cols.push("locationName"); vals.push(data.locationName); }
@@ -184,20 +243,16 @@ export async function POST(req: NextRequest) {
   );
   const row = rows[0];
 
-  // Fetch student + class names for the response
+  // Fetch student name for the response (class already fetched above as classMeta)
   const student = await prisma.user.findUnique({
     where: { id: resolvedStudentId },
     select: { id: true, name: true },
-  });
-  const cls = await prisma.class.findUnique({
-    where: { id: classId },
-    select: { id: true, subject: true },
   });
 
   const record = {
     ...row,
     student: student ?? { id: resolvedStudentId, name: "Unknown" },
-    class:   cls    ?? { id: classId, subject: "Unknown" },
+    class:   { id: classMeta.id, subject: classMeta.subject },
   };
 
   // Ensure savedAt column exists, then stamp it

@@ -2,13 +2,13 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Calendar, Trash2, SendHorizonal, BookOpen, X, Pencil, Users, CheckCircle, AlertTriangle } from "lucide-react";
+import { Plus, Calendar, Trash2, SendHorizonal, BookOpen, X, Pencil, Users, CheckCircle, AlertTriangle, Timer } from "lucide-react";
 import { DashboardLayout, PageHeader } from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatDate, formatTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +19,7 @@ interface ClassItem {
   startTime: string;
   endTime: string;
   dayOfWeek: string;
+  lateThresholdMins: number;
 }
 
 interface Timetable {
@@ -38,7 +39,7 @@ interface Student {
 }
 
 const DAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
-const emptyClass = (): ClassItem => ({ subject: "", room: "", startTime: "09:00", endTime: "10:00", dayOfWeek: "MONDAY" });
+const emptyClass = (): ClassItem => ({ subject: "", room: "", startTime: "09:00", endTime: "10:00", dayOfWeek: "MONDAY", lateThresholdMins: 10 });
 
 export default function AdminTimetablePage() {
   const [timetables, setTimetables] = useState<Timetable[]>([]);
@@ -120,7 +121,7 @@ export default function AdminTimetablePage() {
     setEditingId(t.id);
     setEditingPreEditStatus(t.status);
     setForm({ title: t.title, description: t.description ?? "" });
-    setClasses(t.classes.length > 0 ? t.classes.map((c) => ({ subject: c.subject, room: c.room ?? "", startTime: c.startTime, endTime: c.endTime, dayOfWeek: c.dayOfWeek })) : [emptyClass()]);
+    setClasses(t.classes.length > 0 ? t.classes.map((c) => ({ subject: c.subject, room: c.room ?? "", startTime: c.startTime, endTime: c.endTime, dayOfWeek: c.dayOfWeek, lateThresholdMins: (c as ClassItem).lateThresholdMins ?? 10 })) : [emptyClass()]);
     setError("");
     setDialogOpen(true);
   };
@@ -173,7 +174,7 @@ export default function AdminTimetablePage() {
     setActionLoading(null);
   };
 
-  const updateClass = (i: number, field: keyof ClassItem, value: string) => {
+  const updateClass = (i: number, field: keyof ClassItem, value: string | number) => {
     setClasses((prev) => prev.map((c, idx) => idx === i ? { ...c, [field]: value } : c));
   };
 
@@ -238,6 +239,10 @@ export default function AdminTimetablePage() {
                           <p className="text-xs font-medium text-zinc-300">{c.subject}</p>
                           <p className="text-xs text-zinc-600 mt-0.5">{c.dayOfWeek?.slice(0, 3)} · {formatTime(c.startTime)}</p>
                           {c.room && <p className="text-xs text-zinc-700">{c.room}</p>}
+                          <p className="text-[10px] text-amber-600/80 mt-0.5 flex items-center gap-0.5">
+                            <Timer className="h-2.5 w-2.5" />
+                            Late after {(c as ClassItem).lateThresholdMins ?? 10}min
+                          </p>
                           {/* Enroll students button — only for approved timetable classes with an ID */}
                           {c.id && t.status === "APPROVED" && (
                             <button onClick={() => openEnroll(c)}
@@ -281,6 +286,9 @@ export default function AdminTimetablePage() {
                   : "Edit Timetable"
                 : "Create New Timetable"}
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Set the timetable title, description, and class slots with subject, room, day, and times.
+            </DialogDescription>
           </DialogHeader>
           <form
             onSubmit={(e) => {
@@ -323,7 +331,7 @@ export default function AdminTimetablePage() {
                         <Input placeholder="Subject (e.g. Math)" value={c.subject} onChange={(e) => updateClass(i, "subject", e.target.value)} required />
                         <Input placeholder="Room (optional)" value={c.room} onChange={(e) => updateClass(i, "room", e.target.value)} />
                       </div>
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         <div className="flex flex-col gap-1.5">
                           <label className="text-xs text-zinc-400">Day</label>
                           <select value={c.dayOfWeek} onChange={(e) => updateClass(i, "dayOfWeek", e.target.value)}
@@ -340,6 +348,18 @@ export default function AdminTimetablePage() {
                           <label className="text-xs text-zinc-400">End</label>
                           <input type="time" value={c.endTime} onChange={(e) => updateClass(i, "endTime", e.target.value)}
                             className="h-9 rounded-xl border border-zinc-700 bg-zinc-800/50 px-2.5 text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50" />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs text-zinc-400 flex items-center gap-1">
+                            <Timer className="h-3 w-3 text-amber-400" />
+                            Late after (min)
+                          </label>
+                          <input
+                            type="number" min={1} max={60}
+                            value={c.lateThresholdMins}
+                            onChange={(e) => updateClass(i, "lateThresholdMins", Math.min(60, Math.max(1, Number(e.target.value))))}
+                            className="h-9 rounded-xl border border-zinc-700 bg-zinc-800/50 px-2.5 text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                          />
                         </div>
                       </div>
                     </motion.div>
@@ -370,34 +390,117 @@ export default function AdminTimetablePage() {
 
       {/* Enrollment Dialog */}
       <Dialog open={enrollDialog} onOpenChange={setEnrollDialog}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <Users className="h-5 w-5 text-indigo-400" />
               Enroll Students — {enrollingClass?.subject}
+              {enrollingClass?.dayOfWeek && (
+                <span className="text-sm font-normal text-zinc-500">
+                  · {enrollingClass.dayOfWeek.slice(0, 3)} {formatTime(enrollingClass.startTime)}–{formatTime(enrollingClass.endTime)}
+                  {enrollingClass.room ? ` · ${enrollingClass.room}` : ""}
+                </span>
+              )}
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Search and select students to enroll in this class slot.
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <input placeholder="Search students…" value={studentSearch} onChange={(e) => setStudentSearch(e.target.value)}
-              className="w-full h-9 rounded-xl border border-zinc-700 bg-zinc-800/50 px-3 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-            />
 
+          <div className="flex flex-col gap-3 min-h-0 flex-1 overflow-hidden">
+            {/* Search + select-all row */}
+            <div className="flex gap-2 flex-shrink-0">
+              <input
+                placeholder="Search students…"
+                value={studentSearch}
+                onChange={(e) => setStudentSearch(e.target.value)}
+                className="flex-1 h-9 rounded-xl border border-zinc-700 bg-zinc-800/50 px-3 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+              />
+              {allStudents.length > 0 && (
+                <button
+                  onClick={() => {
+                    const allFilteredIds = filteredStudents.map((s) => s.id);
+                    const allSelected = allFilteredIds.every((id) => enrolledIds.has(id));
+                    setEnrolledIds((prev) => {
+                      const next = new Set(prev);
+                      if (allSelected) {
+                        allFilteredIds.forEach((id) => next.delete(id));
+                      } else {
+                        allFilteredIds.forEach((id) => next.add(id));
+                      }
+                      return next;
+                    });
+                  }}
+                  className={cn(
+                    "flex-shrink-0 flex items-center gap-1.5 px-3 h-9 rounded-xl border text-xs font-medium transition-all",
+                    filteredStudents.length > 0 && filteredStudents.every((s) => enrolledIds.has(s.id))
+                      ? "border-indigo-500/50 bg-indigo-950/30 text-indigo-300"
+                      : "border-zinc-700 bg-zinc-800/40 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                  )}
+                >
+                  <div className={cn(
+                    "w-4 h-4 rounded border flex items-center justify-center",
+                    filteredStudents.length > 0 && filteredStudents.every((s) => enrolledIds.has(s.id))
+                      ? "bg-indigo-600 border-indigo-600"
+                      : filteredStudents.some((s) => enrolledIds.has(s.id))
+                        ? "bg-indigo-600/40 border-indigo-500/60"
+                        : "border-zinc-600"
+                  )}>
+                    {filteredStudents.length > 0 && filteredStudents.every((s) => enrolledIds.has(s.id)) && (
+                      <CheckCircle className="h-3 w-3 text-white" />
+                    )}
+                    {filteredStudents.some((s) => enrolledIds.has(s.id)) && !filteredStudents.every((s) => enrolledIds.has(s.id)) && (
+                      <span className="w-2 h-0.5 bg-indigo-300 rounded-full" />
+                    )}
+                  </div>
+                  {filteredStudents.length > 0 && filteredStudents.every((s) => enrolledIds.has(s.id))
+                    ? "Deselect all"
+                    : "Select all"}
+                  {studentSearch && ` (${filteredStudents.length})`}
+                </button>
+              )}
+            </div>
+
+            {/* Student count summary */}
+            <div className="flex items-center justify-between flex-shrink-0">
+              <p className="text-xs text-zinc-500">
+                {filteredStudents.length} student{filteredStudents.length !== 1 ? "s" : ""}
+                {studentSearch ? " matched" : " total"}
+              </p>
+              <p className="text-xs font-medium text-indigo-400">
+                {enrolledIds.size} selected
+                {enrolledIds.size === 0 && <span className="text-zinc-600 font-normal"> · all approved students can mark attendance</span>}
+              </p>
+            </div>
+
+            {/* Student list */}
             {allStudents.length === 0 ? (
-              <p className="text-sm text-zinc-500 text-center py-6">No approved students found</p>
+              <p className="text-sm text-zinc-500 text-center py-10">No approved students found</p>
+            ) : filteredStudents.length === 0 ? (
+              <p className="text-sm text-zinc-500 text-center py-10">No students match "{studentSearch}"</p>
             ) : (
-              <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+              <div className="overflow-y-auto flex-1 pr-1 space-y-1.5">
                 {filteredStudents.map((s) => {
                   const enrolled = enrolledIds.has(s.id);
                   return (
-                    <button key={s.id} onClick={() => toggleEnroll(s.id)}
-                      className={cn("w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all",
-                        enrolled ? "border-indigo-500/50 bg-indigo-950/30" : "border-zinc-700/40 bg-zinc-800/20 hover:border-zinc-600"
+                    <button
+                      key={s.id}
+                      onClick={() => toggleEnroll(s.id)}
+                      className={cn(
+                        "w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all",
+                        enrolled
+                          ? "border-indigo-500/50 bg-indigo-950/30"
+                          : "border-zinc-700/40 bg-zinc-800/20 hover:border-zinc-600"
                       )}
                     >
-                      <div className={cn("w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0",
+                      <div className={cn(
+                        "w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 transition-all",
                         enrolled ? "bg-indigo-600 border-indigo-600" : "border-zinc-600"
                       )}>
                         {enrolled && <CheckCircle className="h-3.5 w-3.5 text-white" />}
+                      </div>
+                      <div className="w-8 h-8 rounded-lg bg-zinc-700/50 flex items-center justify-center text-xs font-bold text-zinc-400 flex-shrink-0">
+                        {s.name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-zinc-200 truncate">{s.name}</p>
@@ -405,7 +508,7 @@ export default function AdminTimetablePage() {
                       </div>
                       {s.faceRegistered
                         ? <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 flex-shrink-0">Face ✓</span>
-                        : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-700/40 text-zinc-500 border border-zinc-700/30 flex-shrink-0">No Face</span>
+                        : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-700/40 text-zinc-500 border border-zinc-700/30 flex-shrink-0">No face</span>
                       }
                     </button>
                   );
@@ -413,14 +516,12 @@ export default function AdminTimetablePage() {
               </div>
             )}
 
-            <p className="text-xs text-zinc-600">
-              {enrolledIds.size} student{enrolledIds.size !== 1 ? "s" : ""} selected.{" "}
-              {enrolledIds.size === 0 ? "If none are selected, all approved students may mark attendance." : ""}
-            </p>
-
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 flex-shrink-0 pt-1 border-t border-zinc-800/50">
               <Button variant="outline" onClick={() => setEnrollDialog(false)}>Cancel</Button>
-              <Button loading={enrollSaving} onClick={saveEnrollment}>Save Enrollment</Button>
+              <Button loading={enrollSaving} onClick={saveEnrollment}>
+                <Users className="h-4 w-4" />
+                Save Enrollment
+              </Button>
             </div>
           </div>
         </DialogContent>

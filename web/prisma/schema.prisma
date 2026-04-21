@@ -61,13 +61,14 @@ model Timetable {
 }
 
 model Class {
-  id        String   @id @default(cuid())
-  subject   String
-  room      String?
-  startTime String
-  endTime   String
-  dayOfWeek String
-  createdAt DateTime @default(now())
+  id                String   @id @default(cuid())
+  subject           String
+  room              String?
+  startTime         String
+  endTime           String
+  dayOfWeek         String
+  lateThresholdMins Int      @default(10)
+  createdAt         DateTime @default(now())
 
   timetableId String
   timetable   Timetable  @relation(fields: [timetableId], references: [id], onDelete: Cascade)

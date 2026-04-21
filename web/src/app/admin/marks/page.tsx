@@ -12,6 +12,35 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
+function validateLocally(targetRows: MarkRow[]): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  targetRows.forEach((row, i) => {
+    const rowNum = i + 1;
+    const { subject, score, maxScore } = row;
+    const s = Number(score);
+    const m = Number(maxScore);
+
+    if (!subject.trim()) {
+      issues.push({ row: rowNum, field: "subject", issue: "Subject is missing", suggestion: "e.g. Mathematics" });
+    }
+    if (score !== "" && isNaN(s)) {
+      issues.push({ row: rowNum, field: "score", issue: "Not a number", suggestion: "e.g. 72" });
+    } else if (!isNaN(s) && s < 0) {
+      issues.push({ row: rowNum, field: "score", issue: "Cannot be negative", suggestion: "Use 0 as minimum" });
+    }
+    if (maxScore !== "" && (isNaN(m) || m <= 0)) {
+      issues.push({ row: rowNum, field: "maxScore", issue: "Must be a positive number", suggestion: "e.g. 100" });
+    }
+    if (!isNaN(s) && !isNaN(m) && m > 0 && s > m) {
+      issues.push({ row: rowNum, field: "score", issue: `Exceeds max (${m})`, suggestion: `Max allowed: ${m}` });
+    }
+    if (!isNaN(s) && !isNaN(m) && m > 0 && s > 0 && (s / m) * 100 < 5) {
+      issues.push({ row: rowNum, field: "score", issue: "Unusually low — verify entry", suggestion: `${s}/${m} is less than 5%` });
+    }
+  });
+  return issues;
+}
+
 interface Student {
   id: string;
   name: string;
@@ -58,7 +87,6 @@ export default function AdminMarksPage() {
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [rows, setRows] = useState<MarkRow[]>([emptyRow()]);
   const [issues, setIssues] = useState<ValidationIssue[]>([]);
-  const [validating, setValidating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState("");
   const [existingMarks, setExistingMarks] = useState<ExistingMark[]>([]);
@@ -102,46 +130,26 @@ export default function AdminMarksPage() {
   }, [selectedStudentId, savedMsg]);
 
   const updateRow = (id: string, field: keyof MarkRow, value: string) => {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
-    setIssues([]);
+    const newRows = rows.map((r) => (r.id === id ? { ...r, [field]: value } : r));
+    setRows(newRows);
+    setIssues(validateLocally(newRows));
   };
 
-  const addRow = () => setRows((prev) => [...prev, emptyRow()]);
-  const removeRow = (id: string) => setRows((prev) => prev.filter((r) => r.id !== id));
-
-  const validate = async (targetRows = rows): Promise<ValidationIssue[]> => {
-    setValidating(true);
-    try {
-      const res = await fetch("/api/marks/validate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          rows: targetRows.map((r, i) => ({
-            row: i + 1,
-            subject: r.subject,
-            score: r.score,
-            maxScore: r.maxScore,
-            examType: r.examType,
-          })),
-        }),
-      });
-      const data = (await res.json()) as { issues: ValidationIssue[] };
-      return data.issues ?? [];
-    } catch {
-      return [];
-    } finally {
-      setValidating(false);
-    }
+  const addRow = () => {
+    const newRows = [...rows, emptyRow()];
+    setRows(newRows);
+    setIssues(validateLocally(newRows));
   };
 
-  const handleValidate = async () => {
-    const found = await validate();
-    setIssues(found);
+  const removeRow = (id: string) => {
+    const newRows = rows.filter((r) => r.id !== id);
+    setRows(newRows);
+    setIssues(validateLocally(newRows));
   };
 
   const handleSave = async () => {
     if (!selectedStudentId) return;
-    const found = await validate();
+    const found = validateLocally(rows);
     setIssues(found);
     if (found.length > 0) return;
 
@@ -179,26 +187,25 @@ export default function AdminMarksPage() {
     });
   };
 
-  const handleCSVText = async (text: string) => {
+  const handleCSVText = (text: string) => {
     setCsvText(text);
     if (!text.trim()) { setCsvParsed([]); setCsvIssues([]); return; }
     const parsed = parseCSV(text);
     setCsvParsed(parsed);
-    const found = await validate(parsed);
-    setCsvIssues(found);
+    setCsvIssues(validateLocally(parsed));
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => { void handleCSVText(ev.target?.result as string); };
+    reader.onload = (ev) => { handleCSVText(ev.target?.result as string); };
     reader.readAsText(file);
   };
 
   const importCSV = async () => {
     if (!selectedStudentId || csvParsed.length === 0) return;
-    const found = await validate(csvParsed);
+    const found = validateLocally(csvParsed);
     setCsvIssues(found);
     if (found.length > 0) return;
 
@@ -227,6 +234,8 @@ export default function AdminMarksPage() {
   };
 
   const issuesOnRow = (rowIdx: number) => issues.filter((i) => i.row === rowIdx + 1);
+  const fieldIssue = (rowIdx: number, field: string) =>
+    issues.find((x) => x.row === rowIdx + 1 && x.field === field);
 
   const selectedStudent = students.find((s) => s.id === selectedStudentId);
 
@@ -388,12 +397,19 @@ export default function AdminMarksPage() {
                         <BookOpen className="h-5 w-5 text-indigo-400" />
                         Enter Marks for {selectedStudent?.name}
                       </CardTitle>
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={handleValidate} disabled={validating}>
-                          <CheckCircle2 className="h-4 w-4" />
-                          {validating ? "Checking..." : "AI Validate"}
-                        </Button>
-                        <Button size="sm" onClick={handleSave} disabled={saving || !selectedStudentId}>
+                      <div className="flex items-center gap-3">
+                        {issues.length > 0 && (
+                          <span className="flex items-center gap-1 text-xs text-red-400">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            {issues.length} issue{issues.length !== 1 ? "s" : ""}
+                          </span>
+                        )}
+                        {issues.length === 0 && rows.some((r) => r.subject.trim()) && (
+                          <span className="flex items-center gap-1 text-xs text-emerald-400">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Looks good
+                          </span>
+                        )}
+                        <Button size="sm" onClick={handleSave} disabled={saving || !selectedStudentId || issues.length > 0}>
                           <Save className="h-4 w-4" />
                           {saving ? "Saving..." : "Save Marks"}
                         </Button>
@@ -420,17 +436,21 @@ export default function AdminMarksPage() {
                         </thead>
                         <tbody className="space-y-2">
                           {rows.map((row, i) => {
-                            const rowIssues = issuesOnRow(i);
-                            const hasIssue = rowIssues.length > 0;
+                            const subjectErr = fieldIssue(i, "subject");
+                            const scoreErr   = fieldIssue(i, "score");
+                            const maxErr     = fieldIssue(i, "maxScore");
                             return (
-                              <tr key={row.id} className={cn("border-b border-zinc-800/40", hasIssue && "bg-red-950/10")}>
+                              <tr key={row.id} className="border-b border-zinc-800/40 align-top">
                                 <td className="pr-3 py-2 w-40">
                                   <Input
                                     value={row.subject}
                                     onChange={(e) => updateRow(row.id, "subject", e.target.value)}
                                     placeholder="e.g. Mathematics"
-                                    className={cn("h-9", hasIssue && rowIssues.some((x) => x.field === "subject") && "border-red-500/50")}
+                                    className={cn("h-9", subjectErr && "border-red-500/60 focus-visible:ring-red-500/40")}
                                   />
+                                  {subjectErr && (
+                                    <p className="text-[11px] text-red-400 mt-1 leading-tight">{subjectErr.issue}</p>
+                                  )}
                                 </td>
                                 <td className="pr-3 py-2 w-24">
                                   <Input
@@ -438,8 +458,11 @@ export default function AdminMarksPage() {
                                     onChange={(e) => updateRow(row.id, "score", e.target.value)}
                                     placeholder="72"
                                     type="number"
-                                    className={cn("h-9", hasIssue && rowIssues.some((x) => x.field === "score") && "border-red-500/50")}
+                                    className={cn("h-9", scoreErr && "border-red-500/60 focus-visible:ring-red-500/40")}
                                   />
+                                  {scoreErr && (
+                                    <p className="text-[11px] text-red-400 mt-1 leading-tight">{scoreErr.issue}</p>
+                                  )}
                                 </td>
                                 <td className="pr-3 py-2 w-24">
                                   <Input
@@ -447,14 +470,17 @@ export default function AdminMarksPage() {
                                     onChange={(e) => updateRow(row.id, "maxScore", e.target.value)}
                                     placeholder="100"
                                     type="number"
-                                    className={cn("h-9", hasIssue && rowIssues.some((x) => x.field === "maxScore") && "border-red-500/50")}
+                                    className={cn("h-9", maxErr && "border-red-500/60 focus-visible:ring-red-500/40")}
                                   />
+                                  {maxErr && (
+                                    <p className="text-[11px] text-red-400 mt-1 leading-tight">{maxErr.issue}</p>
+                                  )}
                                 </td>
                                 <td className="pr-3 py-2 w-40">
                                   <select
                                     value={row.examType}
                                     onChange={(e) => updateRow(row.id, "examType", e.target.value)}
-                                    className={cn("w-full bg-zinc-800/60 border border-zinc-700/60 text-zinc-200 text-sm rounded-lg px-2 py-1.5 h-9 focus:outline-none focus:ring-2 focus:ring-indigo-500/50", hasIssue && rowIssues.some((x) => x.field === "examType") && "border-red-500/50")}
+                                    className="w-full bg-zinc-800/60 border border-zinc-700/60 text-zinc-200 text-sm rounded-lg px-2 py-1.5 h-9 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                                   >
                                     {EXAM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                                   </select>
@@ -475,20 +501,6 @@ export default function AdminMarksPage() {
                       <Plus className="h-4 w-4" /> Add Row
                     </Button>
 
-                    {/* Validation issues */}
-                    {issues.length > 0 && (
-                      <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="mt-4 space-y-2">
-                        <p className="text-xs font-semibold text-red-400 uppercase tracking-wide flex items-center gap-1.5">
-                          <AlertTriangle className="h-3.5 w-3.5" /> AI found {issues.length} issue{issues.length !== 1 ? "s" : ""}
-                        </p>
-                        {issues.map((issue, i) => (
-                          <div key={i} className="bg-red-950/20 border border-red-800/30 rounded-xl p-3">
-                            <p className="text-xs text-red-300 font-medium">Row {issue.row} — {issue.field}: {issue.issue}</p>
-                            <p className="text-xs text-zinc-500 mt-0.5">Suggestion: {issue.suggestion}</p>
-                          </div>
-                        ))}
-                      </motion.div>
-                    )}
                   </CardContent>
                 </Card>
               </motion.div>
@@ -522,7 +534,7 @@ export default function AdminMarksPage() {
 
                     <textarea
                       value={csvText}
-                      onChange={(e) => void handleCSVText(e.target.value)}
+                      onChange={(e) => handleCSVText(e.target.value)}
                       placeholder="Or paste CSV content here..."
                       rows={8}
                       className="w-full bg-zinc-800/40 border border-zinc-700/40 text-zinc-300 text-sm font-mono rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none"

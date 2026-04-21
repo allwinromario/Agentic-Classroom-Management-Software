@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Calendar, Clock, BookOpen, MapPin, ScanFace, Camera, Upload, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import { Calendar, Clock, BookOpen, MapPin, ScanFace, Camera, Upload, CheckCircle2, XCircle, AlertTriangle, Lock, Timer } from "lucide-react";
 import { DashboardLayout, PageHeader } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +18,7 @@ interface ClassItem {
   startTime: string;
   endTime: string;
   room?: string;
+  lateThresholdMins?: number;
 }
 
 interface Timetable {
@@ -65,14 +66,51 @@ async function getLocation(): Promise<GeoLocation | null> {
   });
 }
 
+/** Order for display columns (Mon–Sun). Not aligned with Date.getDay() indices. */
 const DAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
+/** Date.getDay(): 0 = Sunday … 6 = Saturday */
+const WEEKDAY_FROM_JS = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"] as const;
 const DAY_ABBREV: Record<string, string> = { MONDAY: "Mon", TUESDAY: "Tue", WEDNESDAY: "Wed", THURSDAY: "Thu", FRIDAY: "Fri", SATURDAY: "Sat", SUNDAY: "Sun" };
 const SUBJECT_COLORS = ["from-indigo-500 to-blue-600", "from-violet-500 to-purple-600", "from-emerald-500 to-teal-600", "from-pink-500 to-rose-600", "from-amber-500 to-orange-600", "from-cyan-500 to-sky-600"];
+
+type ClassWindow = "not-started" | "open" | "late" | "ended" | "other-day";
+
+function getClassWindow(cls: ClassItem, now: Date): ClassWindow {
+  const todayDay = WEEKDAY_FROM_JS[now.getDay()];
+  if (cls.dayOfWeek !== todayDay) return "other-day";
+
+  const lateGrace = cls.lateThresholdMins ?? 10;
+  const [sh, sm] = cls.startTime.split(":").map(Number);
+  const [eh, em] = cls.endTime.split(":").map(Number);
+  const start = new Date(now); start.setHours(sh, sm, 0, 0);
+  const end   = new Date(now); end.setHours(eh, em, 0, 0);
+  const late  = new Date(start.getTime() + lateGrace * 60_000);
+
+  if (now < start) return "not-started";
+  if (now >= end)  return "ended";
+  if (now <= late) return "open";
+  return "late";
+}
+
+const WINDOW_BADGE: Record<ClassWindow, { label: string; className: string } | null> = {
+  "other-day":   null,
+  "not-started": { label: "Not started", className: "bg-zinc-700/50 text-zinc-400 border-zinc-600/40" },
+  "open":        { label: "Open now",    className: "bg-emerald-600/20 text-emerald-300 border-emerald-600/30" },
+  "late":        { label: "Late",        className: "bg-amber-600/20 text-amber-300 border-amber-600/30" },
+  "ended":       { label: "Ended",       className: "bg-red-600/15 text-red-400 border-red-600/25" },
+};
 
 export default function StudentTimetablePage() {
   const [timetables, setTimetables] = useState<Timetable[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
+  const [now, setNow] = useState(() => new Date());
+
+  // Keep `now` fresh so window badges update without a full page reload
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   // Face scan modal
   const [scanOpen, setScanOpen] = useState(false);
@@ -204,11 +242,21 @@ export default function StudentTimetablePage() {
   }, [scanState, runLivenessCheck]);
 
   const openScanModal = (cls: ClassItem) => {
+    const window = getClassWindow(cls, new Date());
     setScanClass(cls);
-    setScanState("idle");
-    setScanMsg("");
     setCapturedImage(null);
     locationRef.current = null;
+
+    if (window === "ended") {
+      setScanState("fail");
+      setScanMsg(`Attendance window is closed — this class ended at ${cls.endTime}.`);
+    } else if (window === "not-started") {
+      setScanState("fail");
+      setScanMsg(`Class hasn't started yet — attendance opens at ${cls.startTime}.`);
+    } else {
+      setScanState("idle");
+      setScanMsg(window === "late" ? `You are ${cls.lateThresholdMins ?? 10}+ minutes late — your attendance will be recorded as LATE.` : "");
+    }
     setScanOpen(true);
     // Start fetching location immediately in the background
     getLocation().then((loc) => { locationRef.current = loc; });
@@ -287,12 +335,24 @@ export default function StudentTimetablePage() {
       const markData = await markRes.json();
 
       if (markRes.ok) {
+        const status = markData.attendance?.status as string | undefined;
+        const isLate = status === "LATE";
         setScanState("success");
-        setScanMsg(`Attendance marked for ${scanClass.subject}! ${verifyData.message ?? ""}`);
+        setScanMsg(
+          isLate
+            ? `Attendance marked as LATE for ${scanClass.subject}.`
+            : `Attendance marked for ${scanClass.subject}! ${verifyData.message ?? ""}`
+        );
         setTimeout(() => closeScanModal(), 2500);
       } else if (markRes.status === 409 && markData.alreadyMarked) {
         setScanState("duplicate");
         setScanMsg(markData.message ?? "Attendance already marked for this class.");
+      } else if (markData.tooLate) {
+        setScanState("fail");
+        setScanMsg(markData.error ?? "Attendance window is closed — this class has already ended.");
+      } else if (markData.tooEarly) {
+        setScanState("fail");
+        setScanMsg(markData.error ?? "Class hasn't started yet.");
       } else {
         setScanState("fail");
         setScanMsg(markData.error ?? "Failed to mark attendance.");
@@ -304,7 +364,7 @@ export default function StudentTimetablePage() {
   };
 
   const activeTimetable = timetables.find((t) => t.id === selected);
-  const today = DAYS[new Date().getDay()];
+  const today = WEEKDAY_FROM_JS[now.getDay()];
   const getSubjectColor = (subject: string) => SUBJECT_COLORS[subject.charCodeAt(0) % SUBJECT_COLORS.length];
 
   return (
@@ -364,25 +424,44 @@ export default function StudentTimetablePage() {
                             <p className="text-xs text-zinc-700 text-center py-4">—</p>
                           ) : (
                             <div className="space-y-2">
-                              {dayClasses.map((c) => (
-                                <button key={c.id} onClick={() => openScanModal(c)}
-                                  className={cn("w-full p-3 rounded-xl bg-gradient-to-br text-left relative overflow-hidden group transition-all hover:scale-[1.02] active:scale-[0.99]", getSubjectColor(c.subject))}
-                                  title={isToday ? "Tap to mark attendance" : "Tap to mark attendance for this class"}
-                                >
-                                  <div className="absolute inset-0 opacity-10 bg-black" />
-                                  <div className="relative">
-                                    <p className="text-sm font-semibold text-white">{c.subject}</p>
-                                    <div className="flex items-center gap-1 mt-1">
-                                      <Clock className="h-3 w-3 text-white/70" />
-                                      <p className="text-xs text-white/80">{formatTime(c.startTime)} – {formatTime(c.endTime)}</p>
+                              {dayClasses.map((c) => {
+                                const win = getClassWindow(c, now);
+                                const badge = WINDOW_BADGE[win];
+                                const blocked = isToday && (win === "ended" || win === "not-started");
+                                return (
+                                  <button key={c.id} onClick={() => openScanModal(c)}
+                                    disabled={blocked}
+                                    className={cn(
+                                      "w-full p-3 rounded-xl bg-gradient-to-br text-left relative overflow-hidden group transition-all",
+                                      blocked ? "opacity-50 cursor-not-allowed" : "hover:scale-[1.02] active:scale-[0.99]",
+                                      getSubjectColor(c.subject)
+                                    )}
+                                    title={blocked ? (win === "ended" ? `Ended at ${c.endTime}` : `Opens at ${c.startTime}`) : "Tap to mark attendance"}
+                                  >
+                                    <div className="absolute inset-0 opacity-10 bg-black" />
+                                    <div className="relative">
+                                      <p className="text-sm font-semibold text-white">{c.subject}</p>
+                                      <div className="flex items-center gap-1 mt-1">
+                                        <Clock className="h-3 w-3 text-white/70" />
+                                        <p className="text-xs text-white/80">{formatTime(c.startTime)} – {formatTime(c.endTime)}</p>
+                                      </div>
+                                      {c.room && <div className="flex items-center gap-1 mt-0.5"><MapPin className="h-3 w-3 text-white/60" /><p className="text-xs text-white/70">{c.room}</p></div>}
+                                      {isToday && badge && (
+                                        <span className={cn("inline-flex items-center gap-1 mt-1.5 text-[10px] px-1.5 py-0.5 rounded-full border font-medium", badge.className)}>
+                                          {win === "ended" && <Lock className="h-2.5 w-2.5" />}
+                                          {win === "late"  && <Timer className="h-2.5 w-2.5" />}
+                                          {badge.label}
+                                        </span>
+                                      )}
+                                      {!blocked && (
+                                        <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <ScanFace className="h-4 w-4 text-white/80" />
+                                        </div>
+                                      )}
                                     </div>
-                                    {c.room && <div className="flex items-center gap-1 mt-0.5"><MapPin className="h-3 w-3 text-white/60" /><p className="text-xs text-white/70">{c.room}</p></div>}
-                                    <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                      <ScanFace className="h-4 w-4 text-white/80" />
-                                    </div>
-                                  </div>
-                                </button>
-                              ))}
+                                  </button>
+                                );
+                              })}
                             </div>
                           )}
                         </CardContent>
@@ -401,18 +480,35 @@ export default function StudentTimetablePage() {
                   <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {[...activeTimetable.classes]
                       .sort((a, b) => DAYS.indexOf(a.dayOfWeek) - DAYS.indexOf(b.dayOfWeek) || a.startTime.localeCompare(b.startTime))
-                      .map((c) => (
-                        <button key={c.id} onClick={() => openScanModal(c)}
-                          className="flex items-start gap-3 p-3 rounded-xl bg-zinc-800/30 hover:bg-zinc-800/60 transition-colors text-left group">
-                          <div className={`w-2 h-8 rounded-full bg-gradient-to-b flex-shrink-0 mt-0.5 ${getSubjectColor(c.subject)}`} />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-zinc-200">{c.subject}</p>
-                            <p className="text-xs text-zinc-500">{DAY_ABBREV[c.dayOfWeek]} · {formatTime(c.startTime)} – {formatTime(c.endTime)}</p>
-                            {c.room && <p className="text-xs text-zinc-600 mt-0.5">{c.room}</p>}
-                          </div>
-                          <ScanFace className="h-4 w-4 text-zinc-600 group-hover:text-indigo-400 transition-colors flex-shrink-0 mt-0.5" />
-                        </button>
-                      ))}
+                      .map((c) => {
+                        const win = getClassWindow(c, now);
+                        const badge = WINDOW_BADGE[win];
+                        const blocked = win === "ended" || win === "not-started";
+                        return (
+                          <button key={c.id} onClick={() => openScanModal(c)}
+                            disabled={blocked}
+                            className={cn(
+                              "flex items-start gap-3 p-3 rounded-xl bg-zinc-800/30 transition-colors text-left group",
+                              blocked ? "opacity-50 cursor-not-allowed" : "hover:bg-zinc-800/60"
+                            )}>
+                            <div className={`w-2 h-8 rounded-full bg-gradient-to-b flex-shrink-0 mt-0.5 ${getSubjectColor(c.subject)}`} />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-zinc-200">{c.subject}</p>
+                              <p className="text-xs text-zinc-500">{DAY_ABBREV[c.dayOfWeek]} · {formatTime(c.startTime)} – {formatTime(c.endTime)}</p>
+                              {c.room && <p className="text-xs text-zinc-600 mt-0.5">{c.room}</p>}
+                              {badge && (
+                                <span className={cn("inline-flex items-center gap-1 mt-1 text-[10px] px-1.5 py-0.5 rounded-full border font-medium", badge.className)}>
+                                  {win === "ended" && <Lock className="h-2.5 w-2.5" />}
+                                  {win === "late"  && <Timer className="h-2.5 w-2.5" />}
+                                  {badge.label}
+                                </span>
+                              )}
+                            </div>
+                            {!blocked && <ScanFace className="h-4 w-4 text-zinc-600 group-hover:text-indigo-400 transition-colors flex-shrink-0 mt-0.5" />}
+                            {blocked && win === "ended" && <Lock className="h-4 w-4 text-zinc-700 flex-shrink-0 mt-0.5" />}
+                          </button>
+                        );
+                      })}
                   </div>
                 </CardContent>
               </Card>
@@ -429,6 +525,9 @@ export default function StudentTimetablePage() {
               <ScanFace className="h-5 w-5 text-indigo-400" />
               Mark Attendance
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Use your camera or upload a photo to verify your face and mark attendance for this class.
+            </DialogDescription>
           </DialogHeader>
 
           {scanClass && (
@@ -441,10 +540,14 @@ export default function StudentTimetablePage() {
           {/* Success */}
           {scanState === "success" && (
             <div className="flex flex-col items-center gap-3 py-6 text-center">
-              <div className="w-16 h-16 rounded-full bg-emerald-600/20 border border-emerald-600/40 flex items-center justify-center">
-                <CheckCircle2 className="h-9 w-9 text-emerald-400" />
+              <div className={cn("w-16 h-16 rounded-full flex items-center justify-center",
+                scanMsg.includes("LATE") ? "bg-amber-600/20 border border-amber-600/40" : "bg-emerald-600/20 border border-emerald-600/40"
+              )}>
+                <CheckCircle2 className={cn("h-9 w-9", scanMsg.includes("LATE") ? "text-amber-400" : "text-emerald-400")} />
               </div>
-              <p className="text-sm font-semibold text-emerald-300">Attendance Marked!</p>
+              <p className={cn("text-sm font-semibold", scanMsg.includes("LATE") ? "text-amber-300" : "text-emerald-300")}>
+                {scanMsg.includes("LATE") ? "Marked as Late" : "Attendance Marked!"}
+              </p>
               <p className="text-xs text-zinc-400">{scanMsg}</p>
               {locationRef.current && (
                 <div className="flex items-center gap-1.5 text-xs text-zinc-500 bg-zinc-800/50 border border-zinc-700/40 rounded-xl px-3 py-1.5">
@@ -550,6 +653,19 @@ export default function StudentTimetablePage() {
           {/* Idle */}
           {scanState === "idle" && (
             <div className="space-y-4">
+              {scanClass && (() => {
+                const win = getClassWindow(scanClass, new Date());
+                if (win === "late") return (
+                  <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-950/30 border border-amber-700/40">
+                    <Timer className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-amber-300">You are late</p>
+                      <p className="text-[11px] text-amber-400/80 mt-0.5">More than {scanClass.lateThresholdMins ?? 10} minutes have passed since the class started. Your attendance will be recorded as <span className="font-semibold">LATE</span>.</p>
+                    </div>
+                  </div>
+                );
+                return null;
+              })()}
               <p className="text-sm text-zinc-400 text-center">Scan your face to mark attendance for this class.</p>
               {scanMsg && <p className="text-xs text-red-400 bg-red-950/30 border border-red-800/40 rounded-xl px-3 py-2">{scanMsg}</p>}
               <div className="flex flex-wrap justify-center gap-2">

@@ -55,8 +55,8 @@ interface Report {
 }
 
 const LEVEL_CONFIG = {
-  STRONG:  { label: "Strong",  color: "text-emerald-400", bg: "bg-emerald-500/20", border: "border-emerald-500/30", bar: "#10b981" },
   GOOD:    { label: "Good",    color: "text-emerald-400", bg: "bg-emerald-500/20", border: "border-emerald-500/30", bar: "#10b981" },
+  STRONG:  { label: "Strong",  color: "text-emerald-400", bg: "bg-emerald-500/20", border: "border-emerald-500/30", bar: "#10b981" },
   AVERAGE: { label: "Average", color: "text-amber-400",   bg: "bg-amber-500/20",   border: "border-amber-500/30",   bar: "#f59e0b" },
   WEAK:    { label: "Weak",    color: "text-red-400",     bg: "bg-red-500/20",     border: "border-red-500/30",     bar: "#ef4444" },
 } as const;
@@ -370,8 +370,8 @@ export default function AdminStudentReportPage() {
                           <Tooltip
                             contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: "12px", fontSize: 12 }}
                             labelStyle={{ color: "#d4d4d8" }}
-                            formatter={(v: number, _: string, p: { payload: SubjectAnalysis }) => [
-                              `${v}% (${p.payload.score}/${p.payload.maxScore})`, "Score",
+                            formatter={(v: unknown, _: unknown, p: { payload?: SubjectAnalysis }) => [
+                              `${v ?? 0}% (${p.payload?.score ?? 0}/${p.payload?.maxScore ?? 0})`, "Score",
                             ]}
                           />
                           <Bar dataKey="percentage" radius={[6, 6, 0, 0]}>

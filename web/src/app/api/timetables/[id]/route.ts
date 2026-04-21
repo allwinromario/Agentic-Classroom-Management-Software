@@ -9,6 +9,7 @@ const classSchema = z.object({
   startTime: z.string(),
   endTime: z.string(),
   dayOfWeek: z.string(),
+  lateThresholdMins: z.number().int().min(1).max(60).optional().default(10),
 });
 
 const updateSchema = z.object({
@@ -101,9 +102,16 @@ export async function PATCH(
   if (classes !== undefined) {
     await prisma.class.deleteMany({ where: { timetableId: id } });
     if (classes.length > 0) {
-      await prisma.class.createMany({
-        data: classes.map((c) => ({ ...c, timetableId: id })),
-      });
+      // Use raw SQL so lateThresholdMins is persisted even before `prisma db push`
+      const { randomBytes } = await import("crypto");
+      for (const c of classes) {
+        const cid = "c" + randomBytes(11).toString("base64url").slice(0, 24);
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO classes (id, subject, room, startTime, endTime, dayOfWeek, lateThresholdMins, timetableId, createdAt)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+          cid, c.subject, c.room ?? null, c.startTime, c.endTime, c.dayOfWeek, c.lateThresholdMins, id
+        );
+      }
     }
   }
 
