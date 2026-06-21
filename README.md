@@ -1,4 +1,4 @@
-# 🎓 SCMS — Smart Classroom Management System
+# 🎓 SCMS — Smart Classroom Management System.
 
 A production-grade intelligent classroom platform with AI-powered facial recognition attendance, real-time updates, Gemini-powered teacher agent, and role-based management.
 
